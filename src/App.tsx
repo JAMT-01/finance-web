@@ -434,8 +434,12 @@ export default function App() {
 
   useEffect(() => {
     loadCachedTransactions();
-    loadGeminiApiKey();
   }, []);
+
+  // Load Gemini API key when user changes (login/logout)
+  useEffect(() => {
+    loadGeminiApiKey();
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -450,8 +454,27 @@ export default function App() {
     localStorage.setItem(TRANSACTIONS_CACHE_KEY, JSON.stringify(transactionsList));
   }, [transactionsList]);
 
-  const loadGeminiApiKey = () => {
+  const loadGeminiApiKey = async () => {
     try {
+      // First try to load from Supabase if user is logged in
+      if (isSupabaseConfigured && supabase && user) {
+        const { data, error } = await supabase
+          .from('user_settings')
+          .select('gemini_api_key')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (!error && data?.gemini_api_key) {
+          setGeminiApiKey(data.gemini_api_key);
+          setGeminiApiKeyInput(data.gemini_api_key);
+          setApiKeySaved(true);
+          // Also cache locally
+          localStorage.setItem(GEMINI_API_KEY_STORAGE, data.gemini_api_key);
+          return;
+        }
+      }
+      
+      // Fallback to localStorage
       const savedKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
       if (savedKey) {
         setGeminiApiKey(savedKey);
@@ -460,12 +483,39 @@ export default function App() {
       }
     } catch (e) {
       console.error('Load Gemini API key error', e);
+      // Fallback to localStorage on error
+      const savedKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
+      if (savedKey) {
+        setGeminiApiKey(savedKey);
+        setGeminiApiKeyInput(savedKey);
+        setApiKeySaved(true);
+      }
     }
   };
 
-  const saveGeminiApiKey = () => {
+  const saveGeminiApiKey = async () => {
     try {
       const trimmedKey = geminiApiKeyInput.trim();
+      
+      // Save to Supabase if user is logged in
+      if (isSupabaseConfigured && supabase && user) {
+        const { error } = await supabase
+          .from('user_settings')
+          .upsert({
+            user_id: user.id,
+            gemini_api_key: trimmedKey,
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id'
+          });
+        
+        if (error) {
+          console.error('Save to Supabase error:', error);
+          // Still save locally as fallback
+        }
+      }
+      
+      // Always save locally too (for offline access)
       localStorage.setItem(GEMINI_API_KEY_STORAGE, trimmedKey);
       setGeminiApiKey(trimmedKey);
       setApiKeySaved(true);
@@ -476,8 +526,16 @@ export default function App() {
     }
   };
 
-  const clearGeminiApiKey = () => {
+  const clearGeminiApiKey = async () => {
     try {
+      // Remove from Supabase if user is logged in
+      if (isSupabaseConfigured && supabase && user) {
+        await supabase
+          .from('user_settings')
+          .update({ gemini_api_key: null, updated_at: new Date().toISOString() })
+          .eq('user_id', user.id);
+      }
+      
       localStorage.removeItem(GEMINI_API_KEY_STORAGE);
       setGeminiApiKey('');
       setGeminiApiKeyInput('');
