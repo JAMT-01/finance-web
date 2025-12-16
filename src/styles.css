@@ -1531,6 +1531,84 @@ input {
   font-style: italic;
 }
 
+/* Forwarding Email */
+.forwarding-email-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #1a2f23 0%, #1f3b2d 100%);
+  padding: 14px 16px;
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+
+.forwarding-email-code {
+  flex: 1;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  color: #4db88a;
+  letter-spacing: 0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forwarding-email-copy-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #4db88a;
+  color: #1a2f23;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: transform 0.2s, background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.forwarding-email-copy-button:hover {
+  background: #5fcf9a;
+  transform: scale(1.02);
+}
+
+.forwarding-email-copy-button:active {
+  transform: scale(0.98);
+}
+
+.forwarding-email-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.forwarding-instruction-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.forwarding-step-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--green-light);
+  color: var(--green-primary);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.forwarding-instruction-step span:last-child {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 /* All Expenses Modal */
 .all-expenses-modal-sheet {
   background: var(--bg-modal);

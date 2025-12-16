@@ -231,6 +231,24 @@ export default function App() {
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('');
   const [isApiKeySaved, setApiKeySaved] = useState(false);
 
+  // Mercado Pago forwarding email
+  const [forwardingEmailCopied, setForwardingEmailCopied] = useState(false);
+
+  // Generate forwarding email from user ID (matches backend pattern: user_{external_id}@jamty.xyz)
+  const forwardingEmail = user ? `user_${user.id.slice(0, 8)}@jamty.xyz` : null;
+
+  const copyForwardingEmail = async () => {
+    if (!forwardingEmail) return;
+    try {
+      await navigator.clipboard.writeText(forwardingEmail);
+      setForwardingEmailCopied(true);
+      setTimeout(() => setForwardingEmailCopied(false), 2000);
+    } catch (e) {
+      console.error('Copy failed', e);
+      alert('Failed to copy. Please copy manually.');
+    }
+  };
+
   // All expenses modal
   const [isAllExpensesModalVisible, setAllExpensesModalVisible] = useState(false);
 
@@ -2177,19 +2195,51 @@ Category guidelines:
 
               <div className="settings-section">
                 <div className="settings-section-header">
-                  <Icon.Link size={20} color="#1f6f4d" />
-                  <span className="settings-section-title">Mercado Pago</span>
+                  <Icon.Mail size={20} color="#1f6f4d" />
+                  <span className="settings-section-title">Mercado Pago Auto-Import</span>
                 </div>
                 <p className="settings-description">
-                  Connect your Mercado Pago account to automatically import your transactions.
+                  Forward your Mercado Pago notification emails to automatically track your transactions.
                 </p>
 
-                <button className="settings-connect-button">
-                  <Icon.Link size={18} />
-                  <span>Connect Mercado Pago</span>
-                </button>
+                {forwardingEmail && (
+                  <>
+                    <div className="forwarding-email-box">
+                      <code className="forwarding-email-code">{forwardingEmail}</code>
+                      <button
+                        className="forwarding-email-copy-button"
+                        onClick={copyForwardingEmail}
+                      >
+                        {forwardingEmailCopied ? (
+                          <>
+                            <Icon.Check size={16} />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Icon.Copy size={16} />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
 
-                <p className="settings-coming-soon">Coming soon</p>
+                    <div className="forwarding-email-instructions">
+                      <div className="forwarding-instruction-step">
+                        <span className="forwarding-step-number">1</span>
+                        <span>Open your Mercado Pago email notification</span>
+                      </div>
+                      <div className="forwarding-instruction-step">
+                        <span className="forwarding-step-number">2</span>
+                        <span>Forward it to the address above</span>
+                      </div>
+                      <div className="forwarding-instruction-step">
+                        <span className="forwarding-step-number">3</span>
+                        <span>We'll auto-import and categorize it!</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="settings-section">
