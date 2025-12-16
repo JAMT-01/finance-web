@@ -86,7 +86,7 @@ const formatShortDate = (d: Date) => {
 // Convert icon name from various formats to PascalCase for react-feather
 const normalizeIconName = (name: string): string => {
   if (!name) return 'ShoppingBag';
-  
+
   // Map common lowercase/kebab-case names to PascalCase
   const iconMap: Record<string, string> = {
     'shopping-bag': 'ShoppingBag',
@@ -133,14 +133,14 @@ const normalizeIconName = (name: string): string => {
     'calendar': 'Calendar',
     'settings': 'Settings',
   };
-  
+
   const lowerName = name.toLowerCase().replace(/-/g, '');
   if (iconMap[name.toLowerCase()]) return iconMap[name.toLowerCase()];
   if (iconMap[lowerName]) return iconMap[lowerName];
-  
+
   // If already PascalCase, return as is
   if (name[0] === name[0].toUpperCase()) return name;
-  
+
   // Convert to PascalCase
   return name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
 };
@@ -179,11 +179,11 @@ export default function App() {
     numbers: boolean;
     special: boolean;
   }
-  
+
   const getPasswordStrength = (password: string): { score: number; label: string; color: string; checks: PasswordChecks } => {
     const emptyChecks: PasswordChecks = { length: false, lowercase: false, uppercase: false, numbers: false, special: false };
     if (!password) return { score: 0, label: '', color: '#e0e0e0', checks: emptyChecks };
-    
+
     let score = 0;
     const checks: PasswordChecks = {
       length: password.length >= 8,
@@ -192,13 +192,13 @@ export default function App() {
       numbers: /[0-9]/.test(password),
       special: /[!@#$%^&*(),.?":{}|<>]/.test(password),
     };
-    
+
     if (checks.length) score++;
     if (checks.lowercase) score++;
     if (checks.uppercase) score++;
     if (checks.numbers) score++;
     if (checks.special) score++;
-    
+
     if (score <= 1) return { score: 1, label: 'Very Weak', color: '#c73c3c', checks };
     if (score === 2) return { score: 2, label: 'Weak', color: '#e67e22', checks };
     if (score === 3) return { score: 3, label: 'Medium', color: '#f1c40f', checks };
@@ -224,19 +224,33 @@ export default function App() {
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'expenses' | 'overview' | 'budget'>('expenses');
-  
+
   // Settings & Gemini API
   const [isSettingsModalVisible, setSettingsModalVisible] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('');
   const [isApiKeySaved, setApiKeySaved] = useState(false);
-  
+
   // All expenses modal
   const [isAllExpensesModalVisible, setAllExpensesModalVisible] = useState(false);
-  
+
   // Pagination
   const [hasMoreTransactions, setHasMoreTransactions] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Desktop detection for responsive layout
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  // Desktop detection listener
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 768px)');
+    setIsDesktop(mediaQuery.matches);
+
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mediaQuery.addEventListener('change', handler);
+
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
   // Auth listener
   useEffect(() => {
@@ -264,19 +278,19 @@ export default function App() {
       setAuthError('Please enter email and password');
       return;
     }
-    
+
     if (passwordStrength.score < 3) {
       setAuthError('Password is too weak. Include uppercase, lowercase, numbers, and be at least 8 characters.');
       return;
     }
-    
+
     if (authPassword !== authConfirmPassword) {
       setAuthError('Passwords do not match');
       return;
     }
-    
+
     if (!supabase) return;
-    
+
     setAuthSubmitting(true);
     setAuthError(null);
     try {
@@ -284,9 +298,9 @@ export default function App() {
         email: authEmail,
         password: authPassword,
       });
-      
+
       if (error) throw error;
-      
+
       if (data?.user?.identities?.length === 0) {
         if (window.confirm('An account with this email already exists. Would you like to sign in instead?')) {
           setAuthScreen('login');
@@ -295,7 +309,7 @@ export default function App() {
         }
         return;
       }
-      
+
       const signedUpEmail = authEmail;
       setAuthPassword('');
       setAuthConfirmPassword('');
@@ -303,12 +317,12 @@ export default function App() {
       setShowConfirmPassword(false);
       setPendingConfirmationEmail(signedUpEmail);
       setAuthScreen('login');
-      
+
       alert('Check your email! We sent a confirmation link to ' + signedUpEmail);
     } catch (error) {
       const err = error as Error;
-      if (err.message?.toLowerCase().includes('already registered') || 
-          err.message?.toLowerCase().includes('already exists')) {
+      if (err.message?.toLowerCase().includes('already registered') ||
+        err.message?.toLowerCase().includes('already exists')) {
         if (window.confirm('An account with this email already exists. Would you like to sign in instead?')) {
           setAuthScreen('login');
           setAuthConfirmPassword('');
@@ -328,7 +342,7 @@ export default function App() {
       return;
     }
     if (!supabase) return;
-    
+
     setAuthSubmitting(true);
     setAuthError(null);
     try {
@@ -353,17 +367,17 @@ export default function App() {
   const loadTransactions = async (reset = true) => {
     try {
       if (!isSupabaseConfigured || !supabase) return;
-      
+
       const offset = reset ? 0 : transactionsList.length;
-      
+
       const { data, error } = await supabase
         .from('expenses')
         .select('id,label,amount,icon,transaction_at')
         .order('transaction_at', { ascending: false })
         .range(offset, offset + ITEMS_PER_PAGE - 1);
-      
+
       if (error) throw error;
-      
+
       const mapped = (data || []).map((row) => ({
         id: String(row.id),
         icon: row.icon || 'ShoppingBag',
@@ -371,9 +385,9 @@ export default function App() {
         amount: Number(row.amount),
         date: row.transaction_at ? new Date(row.transaction_at) : null,
       }));
-      
+
       setHasMoreTransactions(mapped.length === ITEMS_PER_PAGE);
-      
+
       if (reset) {
         setTransactionsList(mapped);
       } else {
@@ -386,7 +400,7 @@ export default function App() {
 
   const loadMoreTransactions = async () => {
     if (isLoadingMore || !hasMoreTransactions) return;
-    
+
     setIsLoadingMore(true);
     try {
       await loadTransactions(false);
@@ -398,14 +412,14 @@ export default function App() {
   const deleteExpense = async (expenseId: string) => {
     try {
       setTransactionsList((prev) => prev.filter((item) => item.id !== expenseId));
-      
+
       if (isSupabaseConfigured && supabase && user) {
         const { error } = await supabase
           .from('expenses')
           .delete()
           .eq('id', expenseId)
           .eq('user_id', user.id);
-        
+
         if (error) {
           console.error('Delete expense error:', error);
         }
@@ -463,7 +477,7 @@ export default function App() {
           .select('gemini_api_key')
           .eq('user_id', user.id)
           .single();
-        
+
         if (!error && data?.gemini_api_key) {
           setGeminiApiKey(data.gemini_api_key);
           setGeminiApiKeyInput(data.gemini_api_key);
@@ -473,7 +487,7 @@ export default function App() {
           return;
         }
       }
-      
+
       // Fallback to localStorage
       const savedKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
       if (savedKey) {
@@ -496,7 +510,7 @@ export default function App() {
   const saveGeminiApiKey = async () => {
     try {
       const trimmedKey = geminiApiKeyInput.trim();
-      
+
       // Save to Supabase if user is logged in
       if (isSupabaseConfigured && supabase && user) {
         const { error } = await supabase
@@ -508,13 +522,13 @@ export default function App() {
           }, {
             onConflict: 'user_id'
           });
-        
+
         if (error) {
           console.error('Save to Supabase error:', error);
           // Still save locally as fallback
         }
       }
-      
+
       // Always save locally too (for offline access)
       localStorage.setItem(GEMINI_API_KEY_STORAGE, trimmedKey);
       setGeminiApiKey(trimmedKey);
@@ -535,7 +549,7 @@ export default function App() {
           .update({ gemini_api_key: null, updated_at: new Date().toISOString() })
           .eq('user_id', user.id);
       }
-      
+
       localStorage.removeItem(GEMINI_API_KEY_STORAGE);
       setGeminiApiKey('');
       setGeminiApiKeyInput('');
@@ -622,7 +636,7 @@ Category guidelines:
 
     const data = await response.json();
     const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    
+
     const jsonMatch = textContent.match(/\{[\s\S]*\}/);
     const jsonStr = jsonMatch ? jsonMatch[0] : textContent;
 
@@ -630,7 +644,7 @@ Category guidelines:
       const parsed = JSON.parse(jsonStr);
       const items = Array.isArray(parsed) ? parsed : (parsed.items || []);
       const receiptDate = parsed.date || null;
-      
+
       return {
         date: receiptDate,
         items: items.map((item: { description?: string; price?: number; category?: string }, index: number) => {
@@ -677,7 +691,7 @@ Category guidelines:
       });
 
       const ocrResult = await scanReceiptWithGemini(base64);
-      
+
       if (ocrResult.items.length > 0) {
         const itemsWithDate = ocrResult.items.map((item: PendingItem) => ({
           ...item,
@@ -701,11 +715,11 @@ Category guidelines:
       alert('Please enter a valid amount.');
       return;
     }
-    
+
     const normalized = -Math.abs(amountNumber);
     const selectedCategory = categories.find(c => c.id === manualCategoryId);
     const categoryIcon = selectedCategory?.icon || 'ShoppingBag';
-    
+
     const fallbackInsert = () => {
       const newItem: Transaction = {
         id: `${Date.now()}`,
@@ -724,7 +738,7 @@ Category guidelines:
         return merged;
       });
     };
-    
+
     if (isSupabaseConfigured && supabase && user) {
       try {
         const { data, error } = await supabase
@@ -739,9 +753,9 @@ Category guidelines:
           })
           .select('id,label,amount,icon,transaction_at')
           .single();
-          
+
         if (error) throw error;
-        
+
         const newItem: Transaction = {
           id: String(data.id),
           icon: data.icon || categoryIcon,
@@ -749,7 +763,7 @@ Category guidelines:
           amount: Number(data.amount),
           date: data.transaction_at ? new Date(data.transaction_at) : manualDate,
         };
-        
+
         setTransactionsList((prev) => {
           const merged = [newItem, ...prev];
           merged.sort((a, b) => {
@@ -767,7 +781,7 @@ Category guidelines:
     } else {
       fallbackInsert();
     }
-    
+
     setManualDescription('');
     setManualAmount('');
     setManualCategoryId(null);
@@ -801,14 +815,14 @@ Category guidelines:
             transaction_at: transactionDate.toISOString(),
           };
         });
-        
+
         const { data, error } = await supabase
           .from('expenses')
           .insert(inserts)
           .select('id,label,amount,icon,transaction_at');
-        
+
         if (error) throw error;
-        
+
         const savedTransactions = (data || []).map((row) => ({
           id: String(row.id),
           icon: row.icon || 'ShoppingBag',
@@ -816,7 +830,7 @@ Category guidelines:
           amount: Number(row.amount),
           date: row.transaction_at ? new Date(row.transaction_at) : new Date(),
         }));
-        
+
         setTransactionsList((prev) => {
           const merged = [...savedTransactions, ...prev];
           merged.sort((a, b) => {
@@ -890,7 +904,7 @@ Category guidelines:
                   Check your inbox at {pendingConfirmationEmail}
                 </div>
               </div>
-              <button 
+              <button
                 className="auth-success-dismiss"
                 onClick={() => setPendingConfirmationEmail(null)}
               >
@@ -937,7 +951,7 @@ Category guidelines:
                   }}
                   autoComplete={authScreen === 'login' ? 'current-password' : 'new-password'}
                 />
-                <button 
+                <button
                   className="auth-password-toggle"
                   onClick={() => setShowPassword(!showPassword)}
                   type="button"
@@ -945,7 +959,7 @@ Category guidelines:
                   {showPassword ? <Icon.EyeOff size={18} /> : <Icon.Eye size={18} />}
                 </button>
               </div>
-              
+
               {authScreen === 'signup' && authPassword.length > 0 && (
                 <>
                   <div className="password-strength-container">
@@ -955,8 +969,8 @@ Category guidelines:
                           key={level}
                           className="password-strength-segment"
                           style={{
-                            backgroundColor: level <= passwordStrength.score 
-                              ? passwordStrength.color 
+                            backgroundColor: level <= passwordStrength.score
+                              ? passwordStrength.color
                               : '#e0e0e0',
                           }}
                         />
@@ -966,7 +980,7 @@ Category guidelines:
                       {passwordStrength.label}
                     </span>
                   </div>
-                  
+
                   {passwordStrength.score < 3 && (
                     <div className="password-requirements">
                       <div className="password-requirement-row">
@@ -1007,7 +1021,7 @@ Category guidelines:
                     }}
                     autoComplete="new-password"
                   />
-                  <button 
+                  <button
                     className="auth-password-toggle"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     type="button"
@@ -1017,7 +1031,7 @@ Category guidelines:
                 </div>
                 {authConfirmPassword.length > 0 && (
                   <div className="password-match-container">
-                    {authPassword === authConfirmPassword 
+                    {authPassword === authConfirmPassword
                       ? <Icon.CheckCircle size={14} color="#27ae60" />
                       : <Icon.XCircle size={14} color="#c73c3c" />
                     }
@@ -1084,20 +1098,21 @@ Category guidelines:
           </div>
         )}
 
+        {/* Mobile: Tab Bar (hidden on desktop via CSS) */}
         <div className="tab-bar">
-          <button 
+          <button
             className={`tab-chip ${activeTab === 'expenses' ? 'active' : ''}`}
             onClick={() => setActiveTab('expenses')}
           >
             Expenses
           </button>
-          <button 
+          <button
             className={`tab-chip ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
             Overview
           </button>
-          <button 
+          <button
             className={`tab-chip ${activeTab === 'budget' ? 'active' : ''}`}
             onClick={() => setActiveTab('budget')}
           >
@@ -1105,64 +1120,21 @@ Category guidelines:
           </button>
         </div>
 
-        {/* EXPENSES TAB */}
-        {activeTab === 'expenses' && (
-          <div className="content-card">
-            <div className="transactions-header">
-              <h2 className="section-title">Recent Expenses</h2>
-              {transactionsList.length > 6 && (
-                <button className="view-all" onClick={() => setAllExpensesModalVisible(true)}>
-                  View all
-                </button>
-              )}
-            </div>
-            
-            {transactionsList.length === 0 ? (
-              <p className="empty-list-text">No expenses yet. Tap + to add one!</p>
-            ) : (
-              transactionsList.slice(0, 6).map((item, index) => (
-                <div key={item.id}>
-                  {index > 0 && <div className="transaction-divider" />}
-                  <div className="transaction-row">
-                    <div className="transaction-icon-wrapper">
-                      <FeatherIcon name={item.icon} size={18} />
-                    </div>
-                    <div className="transaction-info">
-                      <div className="transaction-label">{item.label}</div>
-                      {item.date && (
-                        <div className="transaction-date">
-                          {formatShortDate(item.date instanceof Date ? item.date : new Date(item.date))}
-                        </div>
-                      )}
-                    </div>
-                    <span className={`transaction-amount ${item.amount >= 0 ? 'positive' : 'negative'}`}>
-                      {item.amount < 0 ? '-' : ''}{formatCurrency(item.amount)}
-                    </span>
-                    <button className="delete-button" onClick={() => deleteExpense(item.id)}>
-                      <Icon.Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* OVERVIEW TAB */}
-        {activeTab === 'overview' && (
+        {/* Desktop Dashboard Layout - all sections visible */}
+        {isDesktop ? (
           (() => {
             // Calculate date range for last month
             const now = new Date();
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-            
+
             // Filter transactions for this month
             const monthTransactions = transactionsList.filter(t => {
               if (!t.date) return false;
               const txDate = t.date instanceof Date ? t.date : new Date(t.date);
               return txDate >= startOfMonth && txDate <= endOfMonth;
             });
-            
+
             // Calculate income and expenses
             const monthIncome = monthTransactions
               .filter(t => t.amount > 0)
@@ -1170,10 +1142,10 @@ Category guidelines:
             const monthExpenses = Math.abs(monthTransactions
               .filter(t => t.amount < 0)
               .reduce((sum, t) => sum + t.amount, 0));
-            
+
             // Calculate total balance (all time)
             const totalBalance = transactionsList.reduce((sum, t) => sum + t.amount, 0);
-            
+
             // Calculate week change
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             const weekTransactions = transactionsList.filter(t => {
@@ -1182,17 +1154,17 @@ Category guidelines:
               return txDate >= weekAgo && txDate <= now;
             });
             const weekChange = weekTransactions.reduce((sum, t) => sum + t.amount, 0);
-            
+
             // Group expenses by icon/category for chart
             const expensesByCategory: Record<string, { amount: number; count: number; icon: string; color: string; label: string }> = {};
             const categoryColors = ['#1f6f4d', '#2d9b6e', '#4db88a', '#7fcba4', '#a8d9be', '#3a8f5c', '#165c3e'];
-            
+
             monthTransactions.filter(t => t.amount < 0).forEach((t) => {
               const key = t.icon || 'ShoppingBag';
               if (!expensesByCategory[key]) {
-                expensesByCategory[key] = { 
-                  amount: 0, 
-                  count: 0, 
+                expensesByCategory[key] = {
+                  amount: 0,
+                  count: 0,
                   icon: key,
                   color: categoryColors[Object.keys(expensesByCategory).length % categoryColors.length],
                   label: t.label.split(' ')[0]
@@ -1201,7 +1173,7 @@ Category guidelines:
               expensesByCategory[key].amount += Math.abs(t.amount);
               expensesByCategory[key].count += 1;
             });
-            
+
             // Convert to array and calculate percentages
             const expenseData = Object.entries(expensesByCategory)
               .map(([key, data]) => ({
@@ -1214,19 +1186,20 @@ Category guidelines:
                 percentage: monthExpenses > 0 ? Math.round((data.amount / monthExpenses) * 100) : 0
               }))
               .sort((a, b) => b.amount - a.amount)
-              .slice(0, 5); // Top 5 categories
-            
+              .slice(0, 5);
+
             // Spending ratio
             const spendingRatio = monthIncome > 0 ? Math.min(Math.round((monthExpenses / monthIncome) * 100), 100) : 0;
             const savingsRate = monthIncome > 0 ? Math.max(100 - spendingRatio, 0) : 0;
-            
+
             // Month name
-            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                               'July', 'August', 'September', 'October', 'November', 'December'];
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
             const currentMonthName = monthNames[now.getMonth()];
-            
+
             return (
-              <>
+              <div className="dashboard-layout">
+                {/* Balance Card - Full Width */}
                 <div className="overview-balance-card">
                   <div className="overview-balance-label">Total Balance</div>
                   <div className="overview-balance-value">
@@ -1238,186 +1211,537 @@ Category guidelines:
                   </div>
                 </div>
 
-                <div className="content-card">
-                  <h2 className="section-title">{currentMonthName} Expenses</h2>
-                  {expenseData.length === 0 ? (
-                    <p className="empty-list-text">No expenses this month</p>
-                  ) : (
-                    <div className="budget-chart-row">
-                      <div className="budget-donut-container">
-                        <svg width="160" height="160" viewBox="0 0 160 160">
-                          <g transform="rotate(-90 80 80)">
-                            {(() => {
-                              const chartRadius = 72;
-                              const chartStroke = 14;
-                              const chartCircumference = 2 * Math.PI * (chartRadius - chartStroke / 2);
-                              let accumulated = 0;
-                              
-                              return expenseData.map((item) => {
-                                const segmentStart = accumulated;
-                                accumulated += item.percentage;
-                                const strokeDashoffset = chartCircumference - (segmentStart / 100) * chartCircumference;
-                                const strokeDashLength = (item.percentage / 100) * chartCircumference;
-                                
-                                return (
-                                  <circle
-                                    key={item.id}
-                                    cx={80}
-                                    cy={80}
-                                    r={chartRadius - chartStroke / 2}
-                                    stroke={item.color}
-                                    strokeWidth={chartStroke}
-                                    strokeDasharray={`${strokeDashLength} ${chartCircumference - strokeDashLength}`}
-                                    strokeDashoffset={strokeDashoffset}
-                                    fill="transparent"
-                                  />
-                                );
-                              });
-                            })()}
-                          </g>
-                        </svg>
-                        <div className="budget-donut-center">
-                          <div className="budget-donut-label">Total</div>
-                          <div className="budget-donut-value">{formatCurrency(monthExpenses)}</div>
+                {/* Summary Card */}
+                <div className="dashboard-summary">
+                  <div className="content-card">
+                    <h2 className="section-title">{currentMonthName} Summary</h2>
+                    <div className="overview-stats-row">
+                      <div className="overview-stat-card">
+                        <div className="overview-stat-icon" style={{ backgroundColor: '#e1f3e8' }}>
+                          <Icon.ArrowDownLeft size={20} color="#1f6f4d" />
+                        </div>
+                        <div className="overview-stat-label">Income</div>
+                        <div className="overview-stat-value" style={{ color: '#1f6f4d' }}>{formatCurrency(monthIncome)}</div>
+                      </div>
+                      <div className="overview-stat-card">
+                        <div className="overview-stat-icon" style={{ backgroundColor: '#fce8e8' }}>
+                          <Icon.ArrowUpRight size={20} color="#c73c3c" />
+                        </div>
+                        <div className="overview-stat-label">Expenses</div>
+                        <div className="overview-stat-value" style={{ color: '#c73c3c' }}>{formatCurrency(monthExpenses)}</div>
+                      </div>
+                    </div>
+
+                    {monthIncome > 0 && (
+                      <div className="overview-progress-container">
+                        <div className="overview-progress-bar">
+                          <div className="overview-progress-fill" style={{ width: `${spendingRatio}%` }} />
+                        </div>
+                        <div className="overview-progress-text">{spendingRatio}% of income spent</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expenses List Card */}
+                <div className="dashboard-expenses">
+                  <div className="content-card">
+                    <div className="transactions-header">
+                      <h2 className="section-title">Recent Expenses</h2>
+                      {transactionsList.length > 8 && (
+                        <button className="view-all" onClick={() => setAllExpensesModalVisible(true)}>
+                          View all
+                        </button>
+                      )}
+                    </div>
+
+                    {transactionsList.length === 0 ? (
+                      <p className="empty-list-text">No expenses yet. Click + to add one!</p>
+                    ) : (
+                      transactionsList.slice(0, 8).map((item, index) => (
+                        <div key={item.id}>
+                          {index > 0 && <div className="transaction-divider" />}
+                          <div className="transaction-row">
+                            <div className="transaction-icon-wrapper">
+                              <FeatherIcon name={item.icon} size={18} />
+                            </div>
+                            <div className="transaction-info">
+                              <div className="transaction-label">{item.label}</div>
+                              {item.date && (
+                                <div className="transaction-date">
+                                  {formatShortDate(item.date instanceof Date ? item.date : new Date(item.date))}
+                                </div>
+                              )}
+                            </div>
+                            <span className={`transaction-amount ${item.amount >= 0 ? 'positive' : 'negative'}`}>
+                              {item.amount < 0 ? '-' : ''}{formatCurrency(item.amount)}
+                            </span>
+                            <button className="delete-button" onClick={() => deleteExpense(item.id)}>
+                              <Icon.Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* FAB inside expenses for desktop positioning */}
+                  <button
+                    className="fab desktop-expenses-fab"
+                    onClick={() => setFabMenuOpen((prev) => !prev)}
+                  >
+                    {isFabMenuOpen ? <Icon.X size={28} /> : <Icon.Plus size={28} />}
+                  </button>
+                </div>
+
+                {/* Chart Card */}
+                <div className="dashboard-chart">
+                  <div className="content-card">
+                    <h2 className="section-title">{currentMonthName} Breakdown</h2>
+                    {expenseData.length === 0 ? (
+                      <p className="empty-list-text">No expenses this month</p>
+                    ) : (
+                      <div className="budget-chart-row">
+                        <div className="budget-donut-container">
+                          <svg width="160" height="160" viewBox="0 0 160 160">
+                            <g transform="rotate(-90 80 80)">
+                              {(() => {
+                                const chartRadius = 72;
+                                const chartStroke = 14;
+                                const chartCircumference = 2 * Math.PI * (chartRadius - chartStroke / 2);
+                                let accumulated = 0;
+
+                                return expenseData.map((item) => {
+                                  const segmentStart = accumulated;
+                                  accumulated += item.percentage;
+                                  const strokeDashoffset = chartCircumference - (segmentStart / 100) * chartCircumference;
+                                  const strokeDashLength = (item.percentage / 100) * chartCircumference;
+
+                                  return (
+                                    <circle
+                                      key={item.id}
+                                      cx={80}
+                                      cy={80}
+                                      r={chartRadius - chartStroke / 2}
+                                      stroke={item.color}
+                                      strokeWidth={chartStroke}
+                                      strokeDasharray={`${strokeDashLength} ${chartCircumference - strokeDashLength}`}
+                                      strokeDashoffset={strokeDashoffset}
+                                      fill="transparent"
+                                    />
+                                  );
+                                });
+                              })()}
+                            </g>
+                          </svg>
+                          <div className="budget-donut-center">
+                            <div className="budget-donut-label">Total</div>
+                            <div className="budget-donut-value">{formatCurrency(monthExpenses)}</div>
+                          </div>
+                        </div>
+
+                        <div className="budget-legend">
+                          {expenseData.map((item) => (
+                            <div key={item.id} className="budget-legend-item">
+                              <div className="budget-legend-dot" style={{ backgroundColor: item.color }} />
+                              <span className="budget-legend-label">{item.label}</span>
+                              <span className="budget-legend-value">{item.percentage}%</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-
-                      <div className="budget-legend">
-                        {expenseData.map((item) => (
-                          <div key={item.id} className="budget-legend-item">
-                            <div className="budget-legend-dot" style={{ backgroundColor: item.color }} />
-                            <span className="budget-legend-label">{item.label}</span>
-                            <span className="budget-legend-value">{item.percentage}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="content-card">
-                  <h2 className="section-title">{currentMonthName} Summary</h2>
-                  <div className="overview-stats-row">
-                    <div className="overview-stat-card">
-                      <div className="overview-stat-icon" style={{ backgroundColor: '#e1f3e8' }}>
-                        <Icon.ArrowDownLeft size={20} color="#1f6f4d" />
-                      </div>
-                      <div className="overview-stat-label">Income</div>
-                      <div className="overview-stat-value" style={{ color: '#1f6f4d' }}>{formatCurrency(monthIncome)}</div>
-                    </div>
-                    <div className="overview-stat-card">
-                      <div className="overview-stat-icon" style={{ backgroundColor: '#fce8e8' }}>
-                        <Icon.ArrowUpRight size={20} color="#c73c3c" />
-                      </div>
-                      <div className="overview-stat-label">Expenses</div>
-                      <div className="overview-stat-value" style={{ color: '#c73c3c' }}>{formatCurrency(monthExpenses)}</div>
-                    </div>
+                    )}
                   </div>
-                  
-                  {monthIncome > 0 && (
-                    <div className="overview-progress-container">
-                      <div className="overview-progress-bar">
-                        <div className="overview-progress-fill" style={{ width: `${spendingRatio}%` }} />
-                      </div>
-                      <div className="overview-progress-text">{spendingRatio}% of income spent</div>
-                    </div>
-                  )}
                 </div>
 
-                <div className="content-card">
-                  <h2 className="section-title">Quick Insights</h2>
-                  <div className="overview-insights-list">
-                    {expenseData.length > 0 && (
-                      <>
-                        <div className="overview-insight-row">
+                {/* Insights Card */}
+                <div className="dashboard-insights">
+                  <div className="content-card">
+                    <h2 className="section-title">Quick Insights</h2>
+                    <div className="dashboard-insights-grid">
+                      {expenseData.length > 0 && (
+                        <div className="dashboard-insight-card">
                           <div className="overview-insight-icon" style={{ backgroundColor: expenseData[0].color }}>
-                            <FeatherIcon name={expenseData[0].icon} size={16} color="#fff" />
+                            <FeatherIcon name={expenseData[0].icon} size={20} color="#fff" />
                           </div>
                           <div className="overview-insight-content">
                             <div className="overview-insight-title">{expenseData[0].label}</div>
-                            <div className="overview-insight-subtitle">Highest spending • {expenseData[0].count} transactions</div>
+                            <div className="overview-insight-subtitle">Top spending</div>
                           </div>
                           <span className="overview-insight-amount">{formatCurrency(expenseData[0].amount)}</span>
                         </div>
-                        
-                        <div className="overview-insight-divider" />
-                      </>
-                    )}
-                    
-                    <div className="overview-insight-row">
-                      <div className="overview-insight-icon" style={{ backgroundColor: '#1f6f4d' }}>
-                        <Icon.Activity size={16} color="#fff" />
-                      </div>
-                      <div className="overview-insight-content">
-                        <div className="overview-insight-title">Total Transactions</div>
-                        <div className="overview-insight-subtitle">This month</div>
-                      </div>
-                      <span className="overview-insight-amount">{monthTransactions.length}</span>
-                    </div>
-                    
-                    <div className="overview-insight-divider" />
-                    
-                    <div className="overview-insight-row">
-                      <div className="overview-insight-icon" style={{ backgroundColor: savingsRate >= 20 ? '#1f6f4d' : '#e67e22' }}>
-                        <Icon.Target size={16} color="#fff" />
-                      </div>
-                      <div className="overview-insight-content">
-                        <div className="overview-insight-title">Savings Rate</div>
-                        <div className="overview-insight-subtitle">
-                          {savingsRate >= 20 ? 'Great job!' : savingsRate >= 10 ? 'Good progress' : 'Room to improve'}
+                      )}
+
+                      <div className="dashboard-insight-card">
+                        <div className="overview-insight-icon" style={{ backgroundColor: '#1f6f4d' }}>
+                          <Icon.Activity size={20} color="#fff" />
                         </div>
+                        <div className="overview-insight-content">
+                          <div className="overview-insight-title">Transactions</div>
+                          <div className="overview-insight-subtitle">This month</div>
+                        </div>
+                        <span className="overview-insight-amount">{monthTransactions.length}</span>
                       </div>
-                      <span className="overview-insight-amount" style={{ color: savingsRate >= 20 ? '#1f6f4d' : '#e67e22' }}>
-                        {savingsRate}%
-                      </span>
+
+                      <div className="dashboard-insight-card">
+                        <div className="overview-insight-icon" style={{ backgroundColor: savingsRate >= 20 ? '#1f6f4d' : '#e67e22' }}>
+                          <Icon.Target size={20} color="#fff" />
+                        </div>
+                        <div className="overview-insight-content">
+                          <div className="overview-insight-title">Savings Rate</div>
+                          <div className="overview-insight-subtitle">
+                            {savingsRate >= 20 ? 'Great!' : savingsRate >= 10 ? 'Good' : 'Improve'}
+                          </div>
+                        </div>
+                        <span className="overview-insight-amount" style={{ color: savingsRate >= 20 ? '#1f6f4d' : '#e67e22' }}>
+                          {savingsRate}%
+                        </span>
+                      </div>
+
+                      <div className="dashboard-insight-card">
+                        <div className="overview-insight-icon" style={{ backgroundColor: '#2d9b6e' }}>
+                          <Icon.Calendar size={20} color="#fff" />
+                        </div>
+                        <div className="overview-insight-content">
+                          <div className="overview-insight-title">Daily Avg</div>
+                          <div className="overview-insight-subtitle">{now.getDate()} days</div>
+                        </div>
+                        <span className="overview-insight-amount">
+                          {formatCurrency(now.getDate() > 0 ? monthExpenses / now.getDate() : 0)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="content-card">
-                  <h2 className="section-title">Net Position</h2>
-                  <div className="overview-accounts-list">
-                    <div className="overview-account-row">
-                      <div className="overview-account-icon">
-                        <Icon.TrendingUp size={20} />
-                      </div>
-                      <div className="overview-account-content">
-                        <div className="overview-account-name">{currentMonthName} Net</div>
-                        <div className="overview-account-type">Income minus Expenses</div>
-                      </div>
-                      <span className="overview-account-balance" style={{ color: (monthIncome - monthExpenses) >= 0 ? '#1f6f4d' : '#c73c3c' }}>
-                        {(monthIncome - monthExpenses) < 0 ? '-' : '+'}{formatCurrency(Math.abs(monthIncome - monthExpenses))}
-                      </span>
-                    </div>
-                    
-                    <div className="overview-insight-divider" />
-                    
-                    <div className="overview-account-row">
-                      <div className="overview-account-icon">
-                        <Icon.Calendar size={20} />
-                      </div>
-                      <div className="overview-account-content">
-                        <div className="overview-account-name">Avg Daily Spending</div>
-                        <div className="overview-account-type">Based on {now.getDate()} days</div>
-                      </div>
-                      <span className="overview-account-balance">
-                        {formatCurrency(now.getDate() > 0 ? monthExpenses / now.getDate() : 0)}
-                      </span>
-                    </div>
+                {/* Budget Coming Soon */}
+                <div className="dashboard-budget">
+                  <div className="content-card budget-placeholder">
+                    <Icon.PieChart size={48} color="#dcefe4" />
+                    <h2 className="section-title">Budget Coming Soon</h2>
+                    <p className="budget-placeholder-hint">Set spending limits for each category</p>
                   </div>
                 </div>
-              </>
+              </div>
             );
           })()
-        )}
+        ) : (
+          <>
+            {/* Mobile: EXPENSES TAB */}
+            {activeTab === 'expenses' && (
+              <div className="content-card">
+                <div className="transactions-header">
+                  <h2 className="section-title">Recent Expenses</h2>
+                  {transactionsList.length > 6 && (
+                    <button className="view-all" onClick={() => setAllExpensesModalVisible(true)}>
+                      View all
+                    </button>
+                  )}
+                </div>
 
-        {/* BUDGET TAB */}
-        {activeTab === 'budget' && (
-          <div className="content-card budget-placeholder">
-            <Icon.PieChart size={48} color="#dcefe4" />
-            <h2 className="section-title">Budget Coming Soon</h2>
-            <p className="budget-placeholder-hint">Set spending limits for each category</p>
-          </div>
+                {transactionsList.length === 0 ? (
+                  <p className="empty-list-text">No expenses yet. Tap + to add one!</p>
+                ) : (
+                  transactionsList.slice(0, 6).map((item, index) => (
+                    <div key={item.id}>
+                      {index > 0 && <div className="transaction-divider" />}
+                      <div className="transaction-row">
+                        <div className="transaction-icon-wrapper">
+                          <FeatherIcon name={item.icon} size={18} />
+                        </div>
+                        <div className="transaction-info">
+                          <div className="transaction-label">{item.label}</div>
+                          {item.date && (
+                            <div className="transaction-date">
+                              {formatShortDate(item.date instanceof Date ? item.date : new Date(item.date))}
+                            </div>
+                          )}
+                        </div>
+                        <span className={`transaction-amount ${item.amount >= 0 ? 'positive' : 'negative'}`}>
+                          {item.amount < 0 ? '-' : ''}{formatCurrency(item.amount)}
+                        </span>
+                        <button className="delete-button" onClick={() => deleteExpense(item.id)}>
+                          <Icon.Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Mobile: OVERVIEW TAB */}
+            {activeTab === 'overview' && (
+              (() => {
+                // Calculate date range for last month
+                const now = new Date();
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+                // Filter transactions for this month
+                const monthTransactions = transactionsList.filter(t => {
+                  if (!t.date) return false;
+                  const txDate = t.date instanceof Date ? t.date : new Date(t.date);
+                  return txDate >= startOfMonth && txDate <= endOfMonth;
+                });
+
+                // Calculate income and expenses
+                const monthIncome = monthTransactions
+                  .filter(t => t.amount > 0)
+                  .reduce((sum, t) => sum + t.amount, 0);
+                const monthExpenses = Math.abs(monthTransactions
+                  .filter(t => t.amount < 0)
+                  .reduce((sum, t) => sum + t.amount, 0));
+
+                // Calculate total balance (all time)
+                const totalBalance = transactionsList.reduce((sum, t) => sum + t.amount, 0);
+
+                // Calculate week change
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const weekTransactions = transactionsList.filter(t => {
+                  if (!t.date) return false;
+                  const txDate = t.date instanceof Date ? t.date : new Date(t.date);
+                  return txDate >= weekAgo && txDate <= now;
+                });
+                const weekChange = weekTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+                // Group expenses by icon/category for chart
+                const expensesByCategory: Record<string, { amount: number; count: number; icon: string; color: string; label: string }> = {};
+                const categoryColors = ['#1f6f4d', '#2d9b6e', '#4db88a', '#7fcba4', '#a8d9be', '#3a8f5c', '#165c3e'];
+
+                monthTransactions.filter(t => t.amount < 0).forEach((t) => {
+                  const key = t.icon || 'ShoppingBag';
+                  if (!expensesByCategory[key]) {
+                    expensesByCategory[key] = {
+                      amount: 0,
+                      count: 0,
+                      icon: key,
+                      color: categoryColors[Object.keys(expensesByCategory).length % categoryColors.length],
+                      label: t.label.split(' ')[0]
+                    };
+                  }
+                  expensesByCategory[key].amount += Math.abs(t.amount);
+                  expensesByCategory[key].count += 1;
+                });
+
+                // Convert to array and calculate percentages
+                const expenseData = Object.entries(expensesByCategory)
+                  .map(([key, data]) => ({
+                    id: key,
+                    label: data.label,
+                    icon: data.icon,
+                    color: data.color,
+                    amount: data.amount,
+                    count: data.count,
+                    percentage: monthExpenses > 0 ? Math.round((data.amount / monthExpenses) * 100) : 0
+                  }))
+                  .sort((a, b) => b.amount - a.amount)
+                  .slice(0, 5); // Top 5 categories
+
+                // Spending ratio
+                const spendingRatio = monthIncome > 0 ? Math.min(Math.round((monthExpenses / monthIncome) * 100), 100) : 0;
+                const savingsRate = monthIncome > 0 ? Math.max(100 - spendingRatio, 0) : 0;
+
+                // Month name
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+                const currentMonthName = monthNames[now.getMonth()];
+
+                return (
+                  <>
+                    <div className="overview-balance-card">
+                      <div className="overview-balance-label">Total Balance</div>
+                      <div className="overview-balance-value">
+                        {totalBalance < 0 ? '-' : ''}{formatCurrency(totalBalance)}
+                      </div>
+                      <div className="overview-balance-change">
+                        {weekChange >= 0 ? <Icon.TrendingUp size={16} /> : <Icon.TrendingDown size={16} />}
+                        <span>{formatChange(weekChange)} this week</span>
+                      </div>
+                    </div>
+
+                    <div className="content-card">
+                      <h2 className="section-title">{currentMonthName} Expenses</h2>
+                      {expenseData.length === 0 ? (
+                        <p className="empty-list-text">No expenses this month</p>
+                      ) : (
+                        <div className="budget-chart-row">
+                          <div className="budget-donut-container">
+                            <svg width="160" height="160" viewBox="0 0 160 160">
+                              <g transform="rotate(-90 80 80)">
+                                {(() => {
+                                  const chartRadius = 72;
+                                  const chartStroke = 14;
+                                  const chartCircumference = 2 * Math.PI * (chartRadius - chartStroke / 2);
+                                  let accumulated = 0;
+
+                                  return expenseData.map((item) => {
+                                    const segmentStart = accumulated;
+                                    accumulated += item.percentage;
+                                    const strokeDashoffset = chartCircumference - (segmentStart / 100) * chartCircumference;
+                                    const strokeDashLength = (item.percentage / 100) * chartCircumference;
+
+                                    return (
+                                      <circle
+                                        key={item.id}
+                                        cx={80}
+                                        cy={80}
+                                        r={chartRadius - chartStroke / 2}
+                                        stroke={item.color}
+                                        strokeWidth={chartStroke}
+                                        strokeDasharray={`${strokeDashLength} ${chartCircumference - strokeDashLength}`}
+                                        strokeDashoffset={strokeDashoffset}
+                                        fill="transparent"
+                                      />
+                                    );
+                                  });
+                                })()}
+                              </g>
+                            </svg>
+                            <div className="budget-donut-center">
+                              <div className="budget-donut-label">Total</div>
+                              <div className="budget-donut-value">{formatCurrency(monthExpenses)}</div>
+                            </div>
+                          </div>
+
+                          <div className="budget-legend">
+                            {expenseData.map((item) => (
+                              <div key={item.id} className="budget-legend-item">
+                                <div className="budget-legend-dot" style={{ backgroundColor: item.color }} />
+                                <span className="budget-legend-label">{item.label}</span>
+                                <span className="budget-legend-value">{item.percentage}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="content-card">
+                      <h2 className="section-title">{currentMonthName} Summary</h2>
+                      <div className="overview-stats-row">
+                        <div className="overview-stat-card">
+                          <div className="overview-stat-icon" style={{ backgroundColor: '#e1f3e8' }}>
+                            <Icon.ArrowDownLeft size={20} color="#1f6f4d" />
+                          </div>
+                          <div className="overview-stat-label">Income</div>
+                          <div className="overview-stat-value" style={{ color: '#1f6f4d' }}>{formatCurrency(monthIncome)}</div>
+                        </div>
+                        <div className="overview-stat-card">
+                          <div className="overview-stat-icon" style={{ backgroundColor: '#fce8e8' }}>
+                            <Icon.ArrowUpRight size={20} color="#c73c3c" />
+                          </div>
+                          <div className="overview-stat-label">Expenses</div>
+                          <div className="overview-stat-value" style={{ color: '#c73c3c' }}>{formatCurrency(monthExpenses)}</div>
+                        </div>
+                      </div>
+
+                      {monthIncome > 0 && (
+                        <div className="overview-progress-container">
+                          <div className="overview-progress-bar">
+                            <div className="overview-progress-fill" style={{ width: `${spendingRatio}%` }} />
+                          </div>
+                          <div className="overview-progress-text">{spendingRatio}% of income spent</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="content-card">
+                      <h2 className="section-title">Quick Insights</h2>
+                      <div className="overview-insights-list">
+                        {expenseData.length > 0 && (
+                          <>
+                            <div className="overview-insight-row">
+                              <div className="overview-insight-icon" style={{ backgroundColor: expenseData[0].color }}>
+                                <FeatherIcon name={expenseData[0].icon} size={16} color="#fff" />
+                              </div>
+                              <div className="overview-insight-content">
+                                <div className="overview-insight-title">{expenseData[0].label}</div>
+                                <div className="overview-insight-subtitle">Highest spending • {expenseData[0].count} transactions</div>
+                              </div>
+                              <span className="overview-insight-amount">{formatCurrency(expenseData[0].amount)}</span>
+                            </div>
+
+                            <div className="overview-insight-divider" />
+                          </>
+                        )}
+
+                        <div className="overview-insight-row">
+                          <div className="overview-insight-icon" style={{ backgroundColor: '#1f6f4d' }}>
+                            <Icon.Activity size={16} color="#fff" />
+                          </div>
+                          <div className="overview-insight-content">
+                            <div className="overview-insight-title">Total Transactions</div>
+                            <div className="overview-insight-subtitle">This month</div>
+                          </div>
+                          <span className="overview-insight-amount">{monthTransactions.length}</span>
+                        </div>
+
+                        <div className="overview-insight-divider" />
+
+                        <div className="overview-insight-row">
+                          <div className="overview-insight-icon" style={{ backgroundColor: savingsRate >= 20 ? '#1f6f4d' : '#e67e22' }}>
+                            <Icon.Target size={16} color="#fff" />
+                          </div>
+                          <div className="overview-insight-content">
+                            <div className="overview-insight-title">Savings Rate</div>
+                            <div className="overview-insight-subtitle">
+                              {savingsRate >= 20 ? 'Great job!' : savingsRate >= 10 ? 'Good progress' : 'Room to improve'}
+                            </div>
+                          </div>
+                          <span className="overview-insight-amount" style={{ color: savingsRate >= 20 ? '#1f6f4d' : '#e67e22' }}>
+                            {savingsRate}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="content-card">
+                      <h2 className="section-title">Net Position</h2>
+                      <div className="overview-accounts-list">
+                        <div className="overview-account-row">
+                          <div className="overview-account-icon">
+                            <Icon.TrendingUp size={20} />
+                          </div>
+                          <div className="overview-account-content">
+                            <div className="overview-account-name">{currentMonthName} Net</div>
+                            <div className="overview-account-type">Income minus Expenses</div>
+                          </div>
+                          <span className="overview-account-balance" style={{ color: (monthIncome - monthExpenses) >= 0 ? '#1f6f4d' : '#c73c3c' }}>
+                            {(monthIncome - monthExpenses) < 0 ? '-' : '+'}{formatCurrency(Math.abs(monthIncome - monthExpenses))}
+                          </span>
+                        </div>
+
+                        <div className="overview-insight-divider" />
+
+                        <div className="overview-account-row">
+                          <div className="overview-account-icon">
+                            <Icon.Calendar size={20} />
+                          </div>
+                          <div className="overview-account-content">
+                            <div className="overview-account-name">Avg Daily Spending</div>
+                            <div className="overview-account-type">Based on {now.getDate()} days</div>
+                          </div>
+                          <span className="overview-account-balance">
+                            {formatCurrency(now.getDate() > 0 ? monthExpenses / now.getDate() : 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()
+            )}
+
+            {/* Mobile: BUDGET TAB */}
+            {activeTab === 'budget' && (
+              <div className="content-card budget-placeholder">
+                <Icon.PieChart size={48} color="#dcefe4" />
+                <h2 className="section-title">Budget Coming Soon</h2>
+                <p className="budget-placeholder-hint">Set spending limits for each category</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1509,7 +1833,7 @@ Category guidelines:
               <div className="details-card">
                 <div className="details-title">Details</div>
 
-                <div 
+                <div
                   className="detail-row"
                   onClick={() => {
                     setDatePickerVisible(false);
@@ -1519,7 +1843,7 @@ Category guidelines:
                   <span className="detail-label">Category</span>
                   <div className="detail-value-wrap">
                     <span className="detail-value-text">
-                      {manualCategoryId 
+                      {manualCategoryId
                         ? categories.find((c) => c.id === manualCategoryId)?.label || 'Select Category…'
                         : 'Select Category…'}
                     </span>
@@ -1562,7 +1886,7 @@ Category guidelines:
                   />
                 </div>
 
-                <div 
+                <div
                   className="detail-row"
                   onClick={() => {
                     setCategoryPickerOpen(false);
@@ -1585,15 +1909,15 @@ Category guidelines:
                     {(() => {
                       const today = new Date();
                       today.setHours(23, 59, 59, 999);
-                      
+
                       const year = calendarViewDate.getFullYear();
                       const month = calendarViewDate.getMonth();
                       const firstDay = new Date(year, month, 1).getDay();
                       const daysInMonth = new Date(year, month + 1, 0).getDate();
-                      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                                         'July', 'August', 'September', 'October', 'November', 'December'];
+                      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'];
                       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                      
+
                       const days: (number | null)[] = [];
                       for (let i = 0; i < firstDay; i++) {
                         days.push(null);
@@ -1601,7 +1925,7 @@ Category guidelines:
                       for (let i = 1; i <= daysInMonth; i++) {
                         days.push(i);
                       }
-                      
+
                       const weeks: (number | null)[][] = [];
                       for (let i = 0; i < days.length; i += 7) {
                         const week = days.slice(i, i + 7);
@@ -1610,42 +1934,42 @@ Category guidelines:
                         }
                         weeks.push(week);
                       }
-                      
+
                       const isSelected = (day: number | null) => {
                         if (!day) return false;
-                        return manualDate.getDate() === day && 
-                               manualDate.getMonth() === month && 
-                               manualDate.getFullYear() === year;
+                        return manualDate.getDate() === day &&
+                          manualDate.getMonth() === month &&
+                          manualDate.getFullYear() === year;
                       };
-                      
+
                       const isToday = (day: number | null) => {
                         if (!day) return false;
                         const t = new Date();
                         return t.getDate() === day && t.getMonth() === month && t.getFullYear() === year;
                       };
-                      
+
                       const isFuture = (day: number | null) => {
                         if (!day) return false;
                         const date = new Date(year, month, day);
                         return date > today;
                       };
-                      
+
                       const canGoNext = () => {
                         const nextMonth = new Date(year, month + 1, 1);
                         return nextMonth <= today;
                       };
-                      
+
                       return (
                         <>
                           <div className="calendar-header">
-                            <button 
+                            <button
                               className="calendar-arrow"
                               onClick={() => setCalendarViewDate(new Date(year, month - 1, 1))}
                             >
                               <Icon.ChevronLeft size={22} />
                             </button>
                             <span className="calendar-month">{monthNames[month]} {year}</span>
-                            <button 
+                            <button
                               className="calendar-arrow"
                               onClick={() => canGoNext() && setCalendarViewDate(new Date(year, month + 1, 1))}
                               disabled={!canGoNext()}
@@ -1718,7 +2042,7 @@ Category guidelines:
             ) : (
               <div className="modal-content">
                 {ocrError && <div className="modal-error">{ocrError}</div>}
-                
+
                 {pendingItems.length === 0 ? (
                   <p className="empty-list-text">No items detected yet.</p>
                 ) : (
@@ -1744,8 +2068,8 @@ Category guidelines:
                             const updated = [...pendingItems];
                             const catId = e.target.value;
                             const catInfo = categoryMapping[catId] || categoryMapping['miscellaneous-other'];
-                            updated[index] = { 
-                              ...updated[index], 
+                            updated[index] = {
+                              ...updated[index],
                               category: catId,
                               categoryIcon: catInfo.icon
                             };
@@ -1772,7 +2096,7 @@ Category guidelines:
                     </div>
                   ))
                 )}
-                
+
                 <button className="primary-button" onClick={addOcrExpenses}>
                   <span className="primary-button-text">Add as Expenses</span>
                 </button>
@@ -1792,7 +2116,7 @@ Category guidelines:
                 <Icon.X size={24} />
               </button>
             </div>
-            
+
             <div className="settings-content">
               <div className="settings-section">
                 <div className="settings-section-header">
@@ -1802,8 +2126,8 @@ Category guidelines:
                 <p className="settings-description">
                   Add your Google Gemini API key to enable AI-powered receipt scanning.
                 </p>
-                
-                <div 
+
+                <div
                   className="settings-link"
                   onClick={() => alert('Visit aistudio.google.com and create a free API key.\n\n1. Sign in with Google\n2. Click "Get API Key"\n3. Create a new key\n4. Copy and paste it here')}
                 >
@@ -1835,7 +2159,7 @@ Category guidelines:
                   <button className="settings-button settings-button-primary" onClick={saveGeminiApiKey}>
                     Save Key
                   </button>
-                  
+
                   {isApiKeySaved && (
                     <button
                       className="settings-button settings-button-danger"
@@ -1859,12 +2183,12 @@ Category guidelines:
                 <p className="settings-description">
                   Connect your Mercado Pago account to automatically import your transactions.
                 </p>
-                
+
                 <button className="settings-connect-button">
                   <Icon.Link size={18} />
                   <span>Connect Mercado Pago</span>
                 </button>
-                
+
                 <p className="settings-coming-soon">Coming soon</p>
               </div>
 
@@ -1892,7 +2216,7 @@ Category guidelines:
                 <Icon.X size={24} />
               </button>
             </div>
-            
+
             <div className="all-expenses-list">
               {transactionsList.map((item, index) => (
                 <div key={item.id}>
@@ -1918,7 +2242,7 @@ Category guidelines:
                   </div>
                 </div>
               ))}
-              
+
               {hasMoreTransactions ? (
                 <button className="load-more-button" onClick={loadMoreTransactions} disabled={isLoadingMore}>
                   {isLoadingMore ? (

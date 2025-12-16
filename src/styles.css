@@ -83,7 +83,9 @@ input {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -742,13 +744,26 @@ input {
   flex-shrink: 0;
 }
 
+.budget-donut-container svg {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
 .budget-donut-center {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   text-align: center;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .budget-donut-label {
@@ -843,6 +858,11 @@ input {
 .fab.active {
   background: var(--green-dark);
   transform: translateX(-50%) scale(0.96);
+}
+
+/* Hide desktop-specific FAB on mobile */
+.desktop-expenses-fab {
+  display: none;
 }
 
 .fab-menu-backdrop {
@@ -1562,22 +1582,440 @@ input {
   object-fit: contain;
 }
 
-/* Responsive */
+/* Responsive - Mobile */
 @media (max-width: 480px) {
   .app-container {
     padding: 0 16px;
   }
-  
+
   .auth-card {
     padding: 24px;
   }
-  
+
   .overview-balance-value {
     font-size: 36px;
   }
-  
+
   .amount-input-large {
     font-size: 28px;
   }
 }
 
+/* Responsive - Desktop */
+@media (min-width: 768px) {
+  .app-container {
+    max-width: 1200px;
+    padding: 0 40px;
+  }
+
+  .main-container {
+    padding-bottom: 60px;
+  }
+
+  /* Header adjustments */
+  .header-top-row {
+    padding: 24px 0;
+  }
+
+  /* Tab bar - centered and compact */
+  .tab-bar {
+    max-width: 400px;
+    margin: 0 auto 24px;
+  }
+
+  /* Content cards grid for Overview */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .overview-grid-full {
+    grid-column: 1 / -1;
+  }
+
+  /* Balance card - full width */
+  .overview-balance-card {
+    padding: 40px;
+    margin-bottom: 24px;
+  }
+
+  .overview-balance-value {
+    font-size: 56px;
+  }
+
+  /* Content cards */
+  .content-card {
+    padding: 28px;
+    margin-bottom: 24px;
+  }
+
+  /* Transactions - show more columns */
+  .transaction-row {
+    padding: 16px 0;
+  }
+
+  .transaction-icon-wrapper {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+  }
+
+  .transaction-label {
+    font-size: 16px;
+  }
+
+  .transaction-amount {
+    font-size: 17px;
+  }
+
+  /* Budget chart - larger */
+  .budget-chart-row {
+    gap: 32px;
+    padding: 16px 0;
+  }
+
+  .budget-donut-container {
+    width: 200px;
+    height: 200px;
+  }
+
+  .budget-donut-value {
+    font-size: 22px;
+  }
+
+  .budget-legend {
+    gap: 14px;
+  }
+
+  .budget-legend-label,
+  .budget-legend-value {
+    font-size: 15px;
+  }
+
+  /* Stats cards */
+  .overview-stats-row {
+    gap: 20px;
+  }
+
+  .overview-stat-card {
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .overview-stat-value {
+    font-size: 24px;
+  }
+
+  /* Insights */
+  .overview-insight-row {
+    padding: 18px 0;
+  }
+
+  .overview-insight-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+
+  .overview-insight-title {
+    font-size: 16px;
+  }
+
+  .overview-insight-amount {
+    font-size: 18px;
+  }
+
+  /* Hide main FAB on desktop - use expenses-specific FAB instead */
+  .fab:not(.desktop-expenses-fab) {
+    display: none;
+  }
+
+  /* FAB - positioned relative to expenses section on desktop */
+  .dashboard-expenses {
+    position: relative;
+  }
+
+  .desktop-expenses-fab {
+    display: flex !important;
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
+    z-index: 50;
+  }
+
+  .desktop-expenses-fab.active {
+    transform: translateX(-50%) scale(0.96);
+  }
+
+  .fab-menu-backdrop {
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+  }
+
+  .fab-menu {
+    margin-bottom: 80px;
+  }
+
+  /* Modals - centered on desktop */
+  .modal-overlay {
+    align-items: center;
+    padding: 40px;
+  }
+
+  .modal-sheet,
+  .settings-modal-sheet,
+  .all-expenses-modal-sheet {
+    border-radius: 32px;
+    max-height: 85vh;
+    min-height: auto;
+  }
+
+  /* Auth - larger card */
+  .auth-card {
+    max-width: 440px;
+    padding: 40px;
+  }
+
+  .auth-title {
+    font-size: 30px;
+  }
+}
+
+
+/* Responsive - Large Desktop */
+@media (min-width: 1024px) {
+  .app-container {
+    max-width: 1400px;
+    padding: 0 60px;
+  }
+
+  /* Expenses tab - grid layout */
+  .expenses-desktop-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  /* Overview - 3 column grid for insights */
+  .overview-insights-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .overview-insight-card {
+    background: var(--bg-input);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .overview-insight-card .overview-insight-icon {
+    margin-bottom: 12px;
+  }
+
+  .overview-insight-card .overview-insight-content {
+    margin-left: 0;
+  }
+
+  /* Two-column layout for main content */
+  .desktop-two-column {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .desktop-sidebar {
+    position: sticky;
+    top: 24px;
+  }
+
+  /* Wider balance card text */
+  .overview-balance-value {
+    font-size: 64px;
+  }
+
+  .overview-balance-card {
+    padding: 48px;
+  }
+}
+
+/* Extra large screens */
+@media (min-width: 1440px) {
+  .app-container {
+    max-width: 1600px;
+  }
+
+  .content-card {
+    padding: 32px;
+  }
+
+  .overview-balance-value {
+    font-size: 72px;
+  }
+}
+
+/* ========================================
+   DESKTOP DASHBOARD LAYOUT
+   Shows all sections in one unified view
+   ======================================== */
+
+@media (min-width: 768px) {
+
+  /* Hide tab bar on desktop - show all sections */
+  .tab-bar {
+    display: none !important;
+  }
+
+  /* Dashboard grid layout */
+  .dashboard-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 24px;
+    padding-bottom: 40px;
+  }
+
+  /* Balance card spans full width at top */
+  .dashboard-layout .overview-balance-card {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  /* Summary and expenses side by side */
+  .dashboard-layout .dashboard-summary {
+    grid-column: 1;
+  }
+
+  .dashboard-layout .dashboard-expenses {
+    grid-column: 2;
+    grid-row: 2 / 4;
+  }
+
+  /* Chart and insights below summary */
+  .dashboard-layout .dashboard-chart {
+    grid-column: 1;
+  }
+
+  /* Quick insights full width at bottom */
+  .dashboard-layout .dashboard-insights {
+    grid-column: 1 / -1;
+  }
+
+  /* Budget section full width */
+  .dashboard-layout .dashboard-budget {
+    grid-column: 1 / -1;
+  }
+
+  /* Adjust content cards in dashboard */
+  .dashboard-layout .content-card {
+    margin-bottom: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Expenses section adjustments */
+  .dashboard-layout .dashboard-expenses .content-card {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  /* Insights grid layout on desktop */
+  .dashboard-insights-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .dashboard-insight-card {
+    background: var(--bg-input);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .dashboard-insight-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(31, 111, 77, 0.1);
+  }
+
+  .dashboard-insight-card .overview-insight-icon {
+    margin-bottom: 12px;
+  }
+
+  .dashboard-insight-card .overview-insight-content {
+    margin-left: 0;
+  }
+
+  .dashboard-insight-card .overview-insight-title {
+    margin-bottom: 4px;
+  }
+
+  .dashboard-insight-card .overview-insight-amount {
+    font-size: 24px;
+    margin-top: 8px;
+  }
+}
+
+/* Dashboard on larger screens */
+@media (min-width: 1200px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 28px;
+  }
+
+  .dashboard-layout .overview-balance-card {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-layout .dashboard-summary {
+    grid-column: 1;
+  }
+
+  .dashboard-layout .dashboard-chart {
+    grid-column: 2;
+  }
+
+  .dashboard-layout .dashboard-expenses {
+    grid-column: 3;
+    grid-row: 2 / 4;
+  }
+
+  .dashboard-layout .dashboard-insights {
+    grid-column: 1 / 3;
+  }
+
+  .dashboard-layout .dashboard-budget {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-insights-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Extra large dashboard */
+@media (min-width: 1600px) {
+  .dashboard-layout {
+    gap: 32px;
+  }
+
+  .dashboard-insight-card .overview-insight-amount {
+    font-size: 28px;
+  }
+}
