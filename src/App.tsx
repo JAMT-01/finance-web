@@ -500,22 +500,26 @@ export default function App() {
           setGeminiApiKey(data.gemini_api_key);
           setGeminiApiKeyInput(data.gemini_api_key);
           setApiKeySaved(true);
-          // Also cache locally
+          // Also cache locally for this user
           localStorage.setItem(GEMINI_API_KEY_STORAGE, data.gemini_api_key);
+          return;
+        } else {
+          // User has no key saved - clear state (don't leak from other users)
+          setGeminiApiKey('');
+          setGeminiApiKeyInput('');
+          setApiKeySaved(false);
+          localStorage.removeItem(GEMINI_API_KEY_STORAGE);
           return;
         }
       }
 
-      // Fallback to localStorage
-      const savedKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
-      if (savedKey) {
-        setGeminiApiKey(savedKey);
-        setGeminiApiKeyInput(savedKey);
-        setApiKeySaved(true);
-      }
+      // Not logged in - clear everything
+      setGeminiApiKey('');
+      setGeminiApiKeyInput('');
+      setApiKeySaved(false);
     } catch (e) {
       console.error('Load Gemini API key error', e);
-      // Fallback to localStorage on error
+      // On network error, try localStorage as offline cache
       const savedKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
       if (savedKey) {
         setGeminiApiKey(savedKey);
