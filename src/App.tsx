@@ -384,32 +384,100 @@ export default function App() {
 
   const loadTransactions = async (reset = true) => {
     try {
-      if (!isSupabaseConfigured || !supabase) return;
+      if (!isSupabaseConfigured || !supabase || !user) return;
 
       const offset = reset ? 0 : transactionsList.length;
 
-      const { data, error } = await supabase
+      // Fetch from expenses table (manual entries)
+      const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
         .select('id,label,amount,icon,transaction_at')
+        .eq('user_id', user.id)
         .order('transaction_at', { ascending: false })
         .range(offset, offset + ITEMS_PER_PAGE - 1);
 
-      if (error) throw error;
+      if (expensesError) throw expensesError;
 
-      const mapped = (data || []).map((row) => ({
+      // Fetch from transactions table (Mercado Pago parsed emails)
+      const { data: mpData, error: mpError } = await supabase
+        .from('transactions')
+        .select('id,email_subject,description,amount,type,category,received_at')
+        .eq('user_id', user.id)
+        .order('received_at', { ascending: false })
+        .range(offset, offset + ITEMS_PER_PAGE - 1);
+
+      if (mpError) {
+        console.warn('Could not load MP transactions:', mpError);
+      }
+
+      // Map expenses
+      const mappedExpenses = (expensesData || []).map((row) => ({
         id: String(row.id),
         icon: row.icon || 'ShoppingBag',
         label: row.label,
         amount: Number(row.amount),
         date: row.transaction_at ? new Date(row.transaction_at) : null,
+        source: 'manual' as const,
       }));
 
-      setHasMoreTransactions(mapped.length === ITEMS_PER_PAGE);
+      // Map Mercado Pago transactions
+      const mappedMp = (mpData || []).map((row) => {
+        // Determine icon based on category or transaction type
+        let icon = 'DollarSign';
+        if (row.category && categoryMapping[row.category]) {
+          icon = categoryMapping[row.category].icon;
+        } else if (row.type?.includes('sent') || row.type?.includes('payment')) {
+          icon = 'ArrowUpRight';
+        } else if (row.type?.includes('received') || row.type?.includes('deposit')) {
+          icon = 'ArrowDownLeft';
+        }
+
+        // Use description if available, otherwise use email_subject cleaned up
+        const label = row.description ||
+          (row.email_subject?.replace(/^(Tu |Your )/, '') || 'Mercado Pago');
+
+        // For outgoing transactions, make amount negative
+        const isOutgoing = row.type?.includes('sent') ||
+          row.type?.includes('payment') ||
+          row.type?.includes('withdrawal') ||
+          row.email_subject?.toLowerCase().includes('enviada') ||
+          row.email_subject?.toLowerCase().includes('pagaste');
+
+        const amount = isOutgoing ? -Math.abs(Number(row.amount)) : Math.abs(Number(row.amount));
+
+        return {
+          id: `mp_${row.id}`,
+          icon,
+          label,
+          amount,
+          date: row.received_at ? new Date(row.received_at) : null,
+          source: 'mercadopago' as const,
+        };
+      });
+
+      // Merge and sort by date
+      const allTransactions = [...mappedExpenses, ...mappedMp].sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      setHasMoreTransactions(
+        mappedExpenses.length === ITEMS_PER_PAGE || mappedMp.length === ITEMS_PER_PAGE
+      );
 
       if (reset) {
-        setTransactionsList(mapped);
+        setTransactionsList(allTransactions);
       } else {
-        setTransactionsList((prev) => [...prev, ...mapped]);
+        setTransactionsList((prev) => {
+          const existingIds = new Set(prev.map(t => t.id));
+          const newItems = allTransactions.filter(t => !existingIds.has(t.id));
+          return [...prev, ...newItems].sort((a, b) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA;
+          });
+        });
       }
     } catch (e) {
       console.error('Load transactions error', e);
