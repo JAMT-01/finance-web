@@ -54,7 +54,41 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 2,
   })}`;
 
+// Transaction type labels for Mercado Pago emails
+const transactionTypeLabels: Record<string, { label: string; shortLabel: string }> = {
+  'transfer_sent': { label: 'Transferencia enviada', shortLabel: 'Enviado' },
+  'transfer_received': { label: 'Transferencia recibida', shortLabel: 'Recibido' },
+  'payment_sent': { label: 'Pago realizado', shortLabel: 'Pago' },
+  'payment_received': { label: 'Pago recibido', shortLabel: 'Cobro' },
+  'deposit': { label: 'Depósito', shortLabel: 'Depósito' },
+  'withdrawal': { label: 'Retiro', shortLabel: 'Retiro' },
+  'refund_received': { label: 'Reembolso recibido', shortLabel: 'Reembolso' },
+  'refund_sent': { label: 'Reembolso enviado', shortLabel: 'Reembolso' },
+};
+
+// Normalize email subject by removing prefixes and cleaning up
+const normalizeEmailSubject = (subject: string | null): string | null => {
+  if (!subject) return null;
+
+  // Remove common email forwarding/reply prefixes
+  let clean = subject.replace(/^(Fwd:|Re:|FW:|fw:|re:)\s*/gi, '');
+
+  // Remove "Tu " or "Your " prefix (Spanish/English)
+  clean = clean.replace(/^(Tu |Your )/i, '');
+
+  // Trim whitespace
+  clean = clean.trim();
+
+  // Capitalize first letter
+  if (clean.length > 0) {
+    clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+  }
+
+  return clean || null;
+};
+
 const formatChange = (amount: number) => `${amount >= 0 ? '+' : ''}${formatCurrency(amount)}`;
+
 
 // Format input amount with thousand separators for display
 const formatAmountInput = (value: string): string => {
@@ -432,9 +466,27 @@ export default function App() {
           icon = 'ArrowDownLeft';
         }
 
-        // Use description if available, otherwise use email_subject cleaned up
-        const label = row.description ||
-          (row.email_subject?.replace(/^(Tu |Your )/, '') || 'Mercado Pago');
+        // Build a meaningful label with priority:
+        // 1. Use description if provided (e.g., counterparty name)
+        // 2. Use category label (e.g., "Food & Dining")
+        // 3. Use transaction type label (e.g., "Transferencia enviada")
+        // 4. Use normalized email subject as fallback
+        // 5. Last resort: "Mercado Pago"
+        let label = 'Mercado Pago';
+
+        if (row.description && row.description.trim()) {
+          // Use description as primary label (usually contains counterparty info)
+          label = row.description.trim();
+        } else if (row.category && categoryMapping[row.category]) {
+          // Use category-based label
+          label = categoryMapping[row.category].label;
+        } else if (row.type && transactionTypeLabels[row.type]) {
+          // Use friendly transaction type label
+          label = transactionTypeLabels[row.type].label;
+        } else if (row.email_subject) {
+          // Normalize email subject as fallback
+          label = normalizeEmailSubject(row.email_subject) || 'Mercado Pago';
+        }
 
         // For outgoing transactions, make amount negative
         const isOutgoing = row.type?.includes('sent') ||
@@ -454,6 +506,7 @@ export default function App() {
           source: 'mercadopago' as const,
         };
       });
+
 
       // Merge and sort by date
       const allTransactions = [...mappedExpenses, ...mappedMp].sort((a, b) => {
