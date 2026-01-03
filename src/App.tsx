@@ -29,10 +29,155 @@ interface PendingItem {
   categoryIcon?: string;
 }
 
+// Budget type for category spending limits
+interface Budget {
+  categoryId: string;
+  limit: number;
+}
+
+// Monthly spending data for trends
+interface MonthlyData {
+  month: string;
+  year: number;
+  monthIndex: number;
+  expenses: number;
+  income: number;
+  transactionCount: number;
+}
+
+// Merchant/payee data
+interface MerchantData {
+  name: string;
+  totalAmount: number;
+  transactionCount: number;
+  lastTransaction: Date | null;
+}
+
+// Day of week spending pattern
+interface DayOfWeekData {
+  day: string;
+  dayIndex: number;
+  totalAmount: number;
+  transactionCount: number;
+  averageAmount: number;
+}
+
 // Constants
 const TRANSACTIONS_CACHE_KEY = 'pf_transactions_v1';
 const GEMINI_API_KEY_STORAGE = 'pf_gemini_api_key';
+const BUDGETS_STORAGE_KEY = 'pf_budgets_v1';
 const ITEMS_PER_PAGE = 25;
+
+// Analytics utility functions
+const getMonthlySpendingData = (transactions: Transaction[], monthsBack: number = 6): MonthlyData[] => {
+  const now = new Date();
+  const result: MonthlyData[] = [];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const startOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+    const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59);
+
+    const monthTx = transactions.filter(t => {
+      if (!t.date) return false;
+      const txDate = t.date instanceof Date ? t.date : new Date(t.date);
+      return txDate >= startOfMonth && txDate <= endOfMonth;
+    });
+
+    const expenses = Math.abs(monthTx.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0));
+    const income = monthTx.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+
+    result.push({
+      month: monthNames[targetDate.getMonth()],
+      year: targetDate.getFullYear(),
+      monthIndex: targetDate.getMonth(),
+      expenses,
+      income,
+      transactionCount: monthTx.length
+    });
+  }
+
+  return result;
+};
+
+const getTopMerchants = (transactions: Transaction[], limit: number = 5): MerchantData[] => {
+  const merchantMap: Record<string, MerchantData> = {};
+
+  transactions.filter(t => t.amount < 0).forEach(t => {
+    const name = t.label.trim();
+    if (!merchantMap[name]) {
+      merchantMap[name] = {
+        name,
+        totalAmount: 0,
+        transactionCount: 0,
+        lastTransaction: null
+      };
+    }
+    merchantMap[name].totalAmount += Math.abs(t.amount);
+    merchantMap[name].transactionCount += 1;
+    if (!merchantMap[name].lastTransaction || (t.date && t.date > merchantMap[name].lastTransaction)) {
+      merchantMap[name].lastTransaction = t.date || null;
+    }
+  });
+
+  return Object.values(merchantMap)
+    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .slice(0, limit);
+};
+
+const getDayOfWeekPatterns = (transactions: Transaction[]): DayOfWeekData[] => {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayData: Record<number, { total: number; count: number }> = {};
+
+  for (let i = 0; i < 7; i++) {
+    dayData[i] = { total: 0, count: 0 };
+  }
+
+  transactions.filter(t => t.amount < 0 && t.date).forEach(t => {
+    const txDate = t.date instanceof Date ? t.date : new Date(t.date!);
+    const dayIndex = txDate.getDay();
+    dayData[dayIndex].total += Math.abs(t.amount);
+    dayData[dayIndex].count += 1;
+  });
+
+  return dayNames.map((day, index) => ({
+    day,
+    dayIndex: index,
+    totalAmount: dayData[index].total,
+    transactionCount: dayData[index].count,
+    averageAmount: dayData[index].count > 0 ? dayData[index].total / dayData[index].count : 0
+  }));
+};
+
+const getMonthComparison = (transactions: Transaction[]): { current: number; previous: number; change: number; changePercent: number } => {
+  const now = new Date();
+  const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+  const currentMonthExpenses = Math.abs(transactions
+    .filter(t => {
+      if (!t.date) return false;
+      const txDate = t.date instanceof Date ? t.date : new Date(t.date);
+      return txDate >= startOfCurrentMonth && txDate <= endOfCurrentMonth && t.amount < 0;
+    })
+    .reduce((sum, t) => sum + t.amount, 0));
+
+  const prevMonthExpenses = Math.abs(transactions
+    .filter(t => {
+      if (!t.date) return false;
+      const txDate = t.date instanceof Date ? t.date : new Date(t.date);
+      return txDate >= startOfPrevMonth && txDate <= endOfPrevMonth && t.amount < 0;
+    })
+    .reduce((sum, t) => sum + t.amount, 0));
+
+  const change = currentMonthExpenses - prevMonthExpenses;
+  const changePercent = prevMonthExpenses > 0 ? Math.round((change / prevMonthExpenses) * 100) : 0;
+
+  return { current: currentMonthExpenses, previous: prevMonthExpenses, change, changePercent };
+};
 
 // Default summary values (now calculated dynamically from transactions)
 
@@ -292,6 +437,49 @@ export default function App() {
 
   // Desktop detection for responsive layout
   const [isDesktop, setIsDesktop] = useState(false);
+
+  // Budget tracking state
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [isBudgetModalVisible, setBudgetModalVisible] = useState(false);
+  const [editingBudgetCategoryId, setEditingBudgetCategoryId] = useState<string | null>(null);
+  const [budgetLimitInput, setBudgetLimitInput] = useState('');
+
+  // Load budgets from localStorage
+  useEffect(() => {
+    try {
+      const savedBudgets = localStorage.getItem(BUDGETS_STORAGE_KEY);
+      if (savedBudgets) {
+        setBudgets(JSON.parse(savedBudgets));
+      }
+    } catch (e) {
+      console.error('Load budgets error', e);
+    }
+  }, []);
+
+  // Save budgets to localStorage
+  useEffect(() => {
+    localStorage.setItem(BUDGETS_STORAGE_KEY, JSON.stringify(budgets));
+  }, [budgets]);
+
+  const saveBudget = (categoryId: string, limit: number) => {
+    setBudgets(prev => {
+      const existing = prev.findIndex(b => b.categoryId === categoryId);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = { categoryId, limit };
+        return updated;
+      }
+      return [...prev, { categoryId, limit }];
+    });
+  };
+
+  const removeBudget = (categoryId: string) => {
+    setBudgets(prev => prev.filter(b => b.categoryId !== categoryId));
+  };
+
+  const getBudgetForCategory = (categoryId: string): Budget | undefined => {
+    return budgets.find(b => b.categoryId === categoryId);
+  };
 
   // Desktop detection listener
   useEffect(() => {
@@ -1339,6 +1527,22 @@ Category guidelines:
             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
               'July', 'August', 'September', 'October', 'November', 'December'];
             const currentMonthName = monthNames[now.getMonth()];
+            const prevMonthName = monthNames[now.getMonth() === 0 ? 11 : now.getMonth() - 1];
+
+            // Analytics data
+            const monthlyTrends = getMonthlySpendingData(transactionsList, 6);
+            const maxMonthlyExpense = Math.max(...monthlyTrends.map(m => m.expenses), 1);
+            const monthComparison = getMonthComparison(transactionsList);
+            const topMerchants = getTopMerchants(transactionsList, 5);
+            const dayPatterns = getDayOfWeekPatterns(transactionsList);
+            const maxDaySpending = Math.max(...dayPatterns.map(d => d.totalAmount), 1);
+
+            // Budget progress calculations
+            const getCategorySpending = (categoryIcon: string) => {
+              return Math.abs(monthTransactions
+                .filter(t => t.amount < 0 && t.icon === categoryIcon)
+                .reduce((sum, t) => sum + t.amount, 0));
+            };
 
             return (
               <div className="dashboard-layout">
@@ -1557,12 +1761,188 @@ Category guidelines:
                   </div>
                 </div>
 
-                {/* Budget Coming Soon */}
+                {/* Spending Trends - 6 Month Bar Chart */}
+                <div className="dashboard-trends">
+                  <div className="content-card">
+                    <h2 className="section-title">Spending Trends</h2>
+                    <p className="section-subtitle">Last 6 months</p>
+                    <div className="trends-chart">
+                      {monthlyTrends.map((month, index) => (
+                        <div key={index} className="trends-bar-container">
+                          <div className="trends-bar-wrapper">
+                            <div
+                              className="trends-bar"
+                              style={{
+                                height: `${(month.expenses / maxMonthlyExpense) * 100}%`,
+                                backgroundColor: month.month === monthlyTrends[monthlyTrends.length - 1].month ? '#1f6f4d' : '#4db88a'
+                              }}
+                            />
+                          </div>
+                          <span className="trends-bar-label">{month.month}</span>
+                          <span className="trends-bar-value">{formatCurrency(month.expenses)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Month Comparison */}
+                <div className="dashboard-comparison">
+                  <div className="content-card">
+                    <h2 className="section-title">Month Comparison</h2>
+                    <div className="comparison-stats">
+                      <div className="comparison-month">
+                        <span className="comparison-label">{prevMonthName}</span>
+                        <span className="comparison-value">{formatCurrency(monthComparison.previous)}</span>
+                      </div>
+                      <div className="comparison-arrow">
+                        {monthComparison.change <= 0 ? (
+                          <Icon.TrendingDown size={24} color="#1f6f4d" />
+                        ) : (
+                          <Icon.TrendingUp size={24} color="#c73c3c" />
+                        )}
+                      </div>
+                      <div className="comparison-month current">
+                        <span className="comparison-label">{currentMonthName}</span>
+                        <span className="comparison-value">{formatCurrency(monthComparison.current)}</span>
+                      </div>
+                    </div>
+                    <div className={`comparison-change ${monthComparison.change <= 0 ? 'positive' : 'negative'}`}>
+                      {monthComparison.change <= 0 ? (
+                        <>
+                          <Icon.ArrowDown size={16} />
+                          <span>Down {formatCurrency(Math.abs(monthComparison.change))} ({Math.abs(monthComparison.changePercent)}%)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icon.ArrowUp size={16} />
+                          <span>Up {formatCurrency(monthComparison.change)} ({monthComparison.changePercent}%)</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Merchants */}
+                <div className="dashboard-merchants">
+                  <div className="content-card">
+                    <h2 className="section-title">Top Merchants</h2>
+                    <p className="section-subtitle">Where you spend most</p>
+                    {topMerchants.length === 0 ? (
+                      <p className="empty-list-text">No spending data yet</p>
+                    ) : (
+                      <div className="merchants-list">
+                        {topMerchants.map((merchant, index) => (
+                          <div key={merchant.name} className="merchant-row">
+                            <div className="merchant-rank">#{index + 1}</div>
+                            <div className="merchant-info">
+                              <div className="merchant-name">{merchant.name}</div>
+                              <div className="merchant-count">{merchant.transactionCount} transactions</div>
+                            </div>
+                            <span className="merchant-amount">{formatCurrency(merchant.totalAmount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Day of Week Patterns */}
+                <div className="dashboard-day-patterns">
+                  <div className="content-card">
+                    <h2 className="section-title">Spending by Day</h2>
+                    <p className="section-subtitle">When you spend most</p>
+                    <div className="day-patterns-chart">
+                      {dayPatterns.map((day) => (
+                        <div key={day.day} className="day-bar-container">
+                          <div className="day-bar-wrapper">
+                            <div
+                              className="day-bar"
+                              style={{
+                                height: `${(day.totalAmount / maxDaySpending) * 100}%`,
+                                backgroundColor: day.dayIndex === 0 || day.dayIndex === 6 ? '#7fcba4' : '#2d9b6e'
+                              }}
+                            />
+                          </div>
+                          <span className="day-bar-label">{day.day}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="day-patterns-summary">
+                      {(() => {
+                        const busiest = dayPatterns.reduce((max, d) => d.totalAmount > max.totalAmount ? d : max, dayPatterns[0]);
+                        return busiest.totalAmount > 0 ? (
+                          <span>Busiest day: <strong>{busiest.day}</strong> ({formatCurrency(busiest.totalAmount)})</span>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Budget Tracking */}
                 <div className="dashboard-budget">
-                  <div className="content-card budget-placeholder">
-                    <Icon.PieChart size={48} color="#dcefe4" />
-                    <h2 className="section-title">Budget Coming Soon</h2>
-                    <p className="budget-placeholder-hint">Set spending limits for each category</p>
+                  <div className="content-card">
+                    <div className="budget-header">
+                      <h2 className="section-title">Budget Tracking</h2>
+                      <button className="budget-add-btn" onClick={() => setBudgetModalVisible(true)}>
+                        <Icon.Plus size={18} />
+                        <span>Set Budget</span>
+                      </button>
+                    </div>
+                    {budgets.length === 0 ? (
+                      <div className="budget-empty">
+                        <Icon.Target size={40} color="#dcefe4" />
+                        <p>Set spending limits for each category to track your budget</p>
+                      </div>
+                    ) : (
+                      <div className="budget-list">
+                        {budgets.map(budget => {
+                          const category = categories.find(c => c.id === budget.categoryId);
+                          if (!category) return null;
+                          const spent = getCategorySpending(category.icon);
+                          const percentage = Math.min(Math.round((spent / budget.limit) * 100), 100);
+                          const isOverBudget = spent > budget.limit;
+                          return (
+                            <div key={budget.categoryId} className="budget-item">
+                              <div className="budget-item-header">
+                                <div className="budget-item-category">
+                                  <div className="budget-item-icon" style={{ backgroundColor: category.color }}>
+                                    <FeatherIcon name={category.icon} size={16} color="#fff" />
+                                  </div>
+                                  <span>{category.label}</span>
+                                </div>
+                                <button
+                                  className="budget-item-remove"
+                                  onClick={() => removeBudget(budget.categoryId)}
+                                >
+                                  <Icon.X size={14} />
+                                </button>
+                              </div>
+                              <div className="budget-item-progress">
+                                <div className="budget-progress-bar">
+                                  <div
+                                    className={`budget-progress-fill ${isOverBudget ? 'over-budget' : ''}`}
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                                <div className="budget-item-amounts">
+                                  <span className={isOverBudget ? 'over-budget-text' : ''}>
+                                    {formatCurrency(spent)}
+                                  </span>
+                                  <span className="budget-limit">of {formatCurrency(budget.limit)}</span>
+                                </div>
+                              </div>
+                              {isOverBudget && (
+                                <div className="budget-warning">
+                                  <Icon.AlertCircle size={14} />
+                                  <span>Over budget by {formatCurrency(spent - budget.limit)}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1876,13 +2256,204 @@ Category guidelines:
               })()
             )}
 
-            {/* Mobile: BUDGET TAB */}
+            {/* Mobile: BUDGET TAB - Now includes Analytics */}
             {activeTab === 'budget' && (
-              <div className="content-card budget-placeholder">
-                <Icon.PieChart size={48} color="#dcefe4" />
-                <h2 className="section-title">Budget Coming Soon</h2>
-                <p className="budget-placeholder-hint">Set spending limits for each category</p>
-              </div>
+              (() => {
+                const now = new Date();
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+                const currentMonthName = monthNames[now.getMonth()];
+                const prevMonthName = monthNames[now.getMonth() === 0 ? 11 : now.getMonth() - 1];
+
+                const monthTransactions = transactionsList.filter(t => {
+                  if (!t.date) return false;
+                  const txDate = t.date instanceof Date ? t.date : new Date(t.date);
+                  return txDate >= startOfMonth && txDate <= endOfMonth;
+                });
+
+                const monthlyTrends = getMonthlySpendingData(transactionsList, 6);
+                const maxMonthlyExpense = Math.max(...monthlyTrends.map(m => m.expenses), 1);
+                const monthComparison = getMonthComparison(transactionsList);
+                const topMerchants = getTopMerchants(transactionsList, 5);
+                const dayPatterns = getDayOfWeekPatterns(transactionsList);
+                const maxDaySpending = Math.max(...dayPatterns.map(d => d.totalAmount), 1);
+
+                const getCategorySpending = (categoryIcon: string) => {
+                  return Math.abs(monthTransactions
+                    .filter(t => t.amount < 0 && t.icon === categoryIcon)
+                    .reduce((sum, t) => sum + t.amount, 0));
+                };
+
+                return (
+                  <div className="mobile-analytics-section">
+                    {/* Spending Trends */}
+                    <div className="content-card">
+                      <h2 className="section-title">Spending Trends</h2>
+                      <p className="section-subtitle">Last 6 months</p>
+                      <div className="trends-chart">
+                        {monthlyTrends.map((month, index) => (
+                          <div key={index} className="trends-bar-container">
+                            <div className="trends-bar-wrapper">
+                              <div
+                                className="trends-bar"
+                                style={{
+                                  height: `${(month.expenses / maxMonthlyExpense) * 100}%`,
+                                  backgroundColor: month.month === monthlyTrends[monthlyTrends.length - 1].month ? '#1f6f4d' : '#4db88a'
+                                }}
+                              />
+                            </div>
+                            <span className="trends-bar-label">{month.month}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Month Comparison */}
+                    <div className="content-card">
+                      <h2 className="section-title">Month Comparison</h2>
+                      <div className="comparison-stats">
+                        <div className="comparison-month">
+                          <span className="comparison-label">{prevMonthName}</span>
+                          <span className="comparison-value">{formatCurrency(monthComparison.previous)}</span>
+                        </div>
+                        <div className="comparison-arrow">
+                          {monthComparison.change <= 0 ? (
+                            <Icon.TrendingDown size={24} color="#1f6f4d" />
+                          ) : (
+                            <Icon.TrendingUp size={24} color="#c73c3c" />
+                          )}
+                        </div>
+                        <div className="comparison-month current">
+                          <span className="comparison-label">{currentMonthName}</span>
+                          <span className="comparison-value">{formatCurrency(monthComparison.current)}</span>
+                        </div>
+                      </div>
+                      <div className={`comparison-change ${monthComparison.change <= 0 ? 'positive' : 'negative'}`}>
+                        {monthComparison.change <= 0 ? (
+                          <>
+                            <Icon.ArrowDown size={16} />
+                            <span>Down {formatCurrency(Math.abs(monthComparison.change))}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Icon.ArrowUp size={16} />
+                            <span>Up {formatCurrency(monthComparison.change)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top Merchants */}
+                    <div className="content-card">
+                      <h2 className="section-title">Top Merchants</h2>
+                      {topMerchants.length === 0 ? (
+                        <p className="empty-list-text">No spending data yet</p>
+                      ) : (
+                        <div className="merchants-list">
+                          {topMerchants.slice(0, 3).map((merchant, index) => (
+                            <div key={merchant.name} className="merchant-row">
+                              <div className="merchant-rank">#{index + 1}</div>
+                              <div className="merchant-info">
+                                <div className="merchant-name">{merchant.name}</div>
+                                <div className="merchant-count">{merchant.transactionCount} tx</div>
+                              </div>
+                              <span className="merchant-amount">{formatCurrency(merchant.totalAmount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Day of Week */}
+                    <div className="content-card">
+                      <h2 className="section-title">Spending by Day</h2>
+                      <div className="day-patterns-chart">
+                        {dayPatterns.map((day) => (
+                          <div key={day.day} className="day-bar-container">
+                            <div className="day-bar-wrapper">
+                              <div
+                                className="day-bar"
+                                style={{
+                                  height: `${(day.totalAmount / maxDaySpending) * 100}%`,
+                                  backgroundColor: day.dayIndex === 0 || day.dayIndex === 6 ? '#7fcba4' : '#2d9b6e'
+                                }}
+                              />
+                            </div>
+                            <span className="day-bar-label">{day.day}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Budget Tracking */}
+                    <div className="content-card">
+                      <div className="budget-header">
+                        <h2 className="section-title">Budget Tracking</h2>
+                        <button className="budget-add-btn" onClick={() => setBudgetModalVisible(true)}>
+                          <Icon.Plus size={18} />
+                          <span>Set</span>
+                        </button>
+                      </div>
+                      {budgets.length === 0 ? (
+                        <div className="budget-empty">
+                          <Icon.Target size={40} color="#dcefe4" />
+                          <p>Set spending limits for each category</p>
+                        </div>
+                      ) : (
+                        <div className="budget-list">
+                          {budgets.map(budget => {
+                            const category = categories.find(c => c.id === budget.categoryId);
+                            if (!category) return null;
+                            const spent = getCategorySpending(category.icon);
+                            const percentage = Math.min(Math.round((spent / budget.limit) * 100), 100);
+                            const isOverBudget = spent > budget.limit;
+                            return (
+                              <div key={budget.categoryId} className="budget-item">
+                                <div className="budget-item-header">
+                                  <div className="budget-item-category">
+                                    <div className="budget-item-icon" style={{ backgroundColor: category.color }}>
+                                      <FeatherIcon name={category.icon} size={16} color="#fff" />
+                                    </div>
+                                    <span>{category.label}</span>
+                                  </div>
+                                  <button
+                                    className="budget-item-remove"
+                                    onClick={() => removeBudget(budget.categoryId)}
+                                  >
+                                    <Icon.X size={14} />
+                                  </button>
+                                </div>
+                                <div className="budget-item-progress">
+                                  <div className="budget-progress-bar">
+                                    <div
+                                      className={`budget-progress-fill ${isOverBudget ? 'over-budget' : ''}`}
+                                      style={{ width: `${percentage}%` }}
+                                    />
+                                  </div>
+                                  <div className="budget-item-amounts">
+                                    <span className={isOverBudget ? 'over-budget-text' : ''}>
+                                      {formatCurrency(spent)}
+                                    </span>
+                                    <span className="budget-limit">of {formatCurrency(budget.limit)}</span>
+                                  </div>
+                                </div>
+                                {isOverBudget && (
+                                  <div className="budget-warning">
+                                    <Icon.AlertCircle size={14} />
+                                    <span>Over by {formatCurrency(spent - budget.limit)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()
             )}
           </>
         )}
@@ -2432,6 +3003,146 @@ Category guidelines:
               ) : transactionsList.length > 0 ? (
                 <p className="no-more-text">No more expenses</p>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Budget Modal */}
+      {isBudgetModalVisible && (
+        <div className="modal-overlay" onClick={() => {
+          setBudgetModalVisible(false);
+          setEditingBudgetCategoryId(null);
+          setBudgetLimitInput('');
+        }}>
+          <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Set Budget</h2>
+              <button className="modal-close" onClick={() => {
+                setBudgetModalVisible(false);
+                setEditingBudgetCategoryId(null);
+                setBudgetLimitInput('');
+              }}>
+                <Icon.X size={24} />
+              </button>
+            </div>
+
+            <div className="modal-content">
+              {!editingBudgetCategoryId ? (
+                <>
+                  <p className="budget-modal-description">
+                    Select a category to set a monthly spending limit
+                  </p>
+                  <div className="budget-category-grid">
+                    {categories.map((cat) => {
+                      const existingBudget = getBudgetForCategory(cat.id);
+                      return (
+                        <button
+                          key={cat.id}
+                          className={`budget-category-card ${existingBudget ? 'has-budget' : ''}`}
+                          onClick={() => {
+                            setEditingBudgetCategoryId(cat.id);
+                            setBudgetLimitInput(existingBudget ? String(existingBudget.limit) : '');
+                          }}
+                        >
+                          <div className="budget-category-icon" style={{ backgroundColor: cat.color }}>
+                            <FeatherIcon name={cat.icon} size={20} color="#fff" />
+                          </div>
+                          <span className="budget-category-name">{cat.label}</span>
+                          {existingBudget && (
+                            <span className="budget-category-limit">
+                              {formatCurrency(existingBudget.limit)}/mo
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="budget-back-btn"
+                    onClick={() => {
+                      setEditingBudgetCategoryId(null);
+                      setBudgetLimitInput('');
+                    }}
+                  >
+                    <Icon.ArrowLeft size={18} />
+                    <span>Back to categories</span>
+                  </button>
+
+                  {(() => {
+                    const cat = categories.find(c => c.id === editingBudgetCategoryId);
+                    if (!cat) return null;
+                    return (
+                      <div className="budget-edit-form">
+                        <div className="budget-edit-category">
+                          <div className="budget-category-icon" style={{ backgroundColor: cat.color }}>
+                            <FeatherIcon name={cat.icon} size={24} color="#fff" />
+                          </div>
+                          <span className="budget-edit-category-name">{cat.label}</span>
+                        </div>
+
+                        <div className="amount-input-card">
+                          <div className="amount-row">
+                            <span className="amount-currency">$</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="amount-input-large"
+                              placeholder="0.00"
+                              value={formatAmountInput(budgetLimitInput)}
+                              onChange={(e) => {
+                                const raw = parseAmountInput(e.target.value);
+                                if (/^\d*\.?\d{0,2}$/.test(raw)) {
+                                  setBudgetLimitInput(raw);
+                                }
+                              }}
+                              autoFocus
+                            />
+                          </div>
+                          <p className="budget-input-hint">Monthly spending limit</p>
+                        </div>
+
+                        <div className="budget-edit-actions">
+                          <button
+                            className="primary-button"
+                            onClick={() => {
+                              const limit = parseFloat(budgetLimitInput);
+                              if (isFinite(limit) && limit > 0) {
+                                saveBudget(editingBudgetCategoryId, limit);
+                                setBudgetModalVisible(false);
+                                setEditingBudgetCategoryId(null);
+                                setBudgetLimitInput('');
+                              } else {
+                                alert('Please enter a valid budget amount');
+                              }
+                            }}
+                          >
+                            <span className="primary-button-text">Save Budget</span>
+                          </button>
+
+                          {getBudgetForCategory(editingBudgetCategoryId) && (
+                            <button
+                              className="budget-remove-btn"
+                              onClick={() => {
+                                removeBudget(editingBudgetCategoryId);
+                                setBudgetModalVisible(false);
+                                setEditingBudgetCategoryId(null);
+                                setBudgetLimitInput('');
+                              }}
+                            >
+                              <Icon.Trash2 size={16} />
+                              <span>Remove Budget</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
             </div>
           </div>
         </div>
