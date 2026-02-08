@@ -586,11 +586,29 @@ export default function App() {
     setAuthSubmitting(true);
     setAuthError(null);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: authPassword,
+      // Call the Cloudflare Worker API for login
+      const response = await fetch('https://jamty-finance-api.agustinmontagner.workers.dev/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
       });
-      if (error) throw error;
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Set the session using the tokens from the worker
+      if (data.session?.access_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        if (error) throw error;
+      } else {
+        throw new Error('Invalid response from server');
+      }
     } catch (error) {
       setAuthError((error as Error).message);
     } finally {
